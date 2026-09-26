@@ -7,7 +7,9 @@ authors = [
     { name = "milinkovicluka", email = "luka.milinkovic@yahoo.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "nltk==3.9.1",
+]
 
 [project.scripts]
 rag-search-engine = "rag_search_engine:main"

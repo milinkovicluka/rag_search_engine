@@ -2,8 +2,12 @@ import argparse
 import json
 import string
 
+from nltk.stem import PorterStemmer
+
 
 punctuation_table = str.maketrans("", "", string.punctuation)
+stemmer = PorterStemmer()
+
 
 def load_stopwords(path: str = "data/stopwords.txt") -> list[str]:
     with open(path) as f:
@@ -21,6 +25,10 @@ def matches_query(query: str, title: str) -> bool:
 
     query_tokens = [t for t in query_tokens if t not in STOPWORDS]
     title_tokens = [t for t in title_tokens if t not in STOPWORDS]
+
+    query_tokens = [stemmer.stem(t) for t in query_tokens]
+    title_tokens = [stemmer.stem(t) for t in title_tokens]
+
     
     return any(q_token in t_token for q_token in query_tokens for t_token in title_tokens)
 
