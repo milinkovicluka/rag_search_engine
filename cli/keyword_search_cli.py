@@ -3,6 +3,8 @@ import json
 import os
 import pickle
 import string
+import sys
+from collections import Counter
 
 from nltk.stem import PorterStemmer
 
@@ -28,11 +30,12 @@ def tokenize_text(text: str) -> list[str]:
     return tokens
 
 
-def matches_query(query: str, title: str) -> bool:
-    """Return True if at least one processed query token appears in any processed title token."""
-    query_tokens = tokenize_text(query)
-    title_tokens = tokenize_text(title)
-    return any(q_token in t_token for q_token in query_tokens for t_token in title_tokens)
+def tokenize_term(term: str) -> str:
+    """Tokenize a single term. Raises if it doesn't reduce to exactly one token."""
+    tokens = tokenize_text(term)
+    if len(tokens) != 1:
+        raise ValueError(f"expected exactly one token, got {len(tokens)}: {tokens}")
+    return tokens[0]
 
 
 def load_movies(path: str = "data/movies.json") -> list[dict]:
@@ -45,6 +48,7 @@ class InvertedIndex:
     def __init__(self):
         self.index: dict[str, set[int]] = {}
         self.docmap: dict[int, dict] = {}
+        self.term_frequencies: dict[int, Counter] = {}
 
     def __add_document(self, doc_id: int, text: str) -> None:
         tokens = tokenize_text(text)
@@ -53,8 +57,15 @@ class InvertedIndex:
                 self.index[token] = set()
             self.index[token].add(doc_id)
 
+            if doc_id not in self.term_frequencies:
+                self.term_frequencies[doc_id] = Counter()
+            self.term_frequencies[doc_id][token] += 1
+
     def get_documents(self, term: str) -> list[int]:
         return sorted(self.index.get(term, set()))
+
+    def get_tf(self, doc_id: int, term: str) -> int:
+        return self.term_frequencies.get(doc_id, Counter()).get(term, 0)
 
     def build(self) -> None:
         movies = load_movies()
@@ -69,14 +80,65 @@ class InvertedIndex:
             pickle.dump(self.index, f)
         with open("cache/docmap.pkl", "wb") as f:
             pickle.dump(self.docmap, f)
+        with open("cache/term_frequencies.pkl", "wb") as f:
+            pickle.dump(self.term_frequencies, f)
+
+    def load(self) -> None:
+        with open("cache/index.pkl", "rb") as f:
+            self.index = pickle.load(f)
+        with open("cache/docmap.pkl", "rb") as f:
+            self.docmap = pickle.load(f)
+        with open("cache/term_frequencies.pkl", "rb") as f:
+            self.term_frequencies = pickle.load(f)
 
 
 def build_command() -> None:
     index = InvertedIndex()
     index.build()
     index.save()
-    docs = index.get_documents("merida")
-    print(f"First document for token 'merida' = {docs[0]}")
+    print("Index built and saved to cache/")
+
+
+def search_command(query: str) -> None:
+    index = InvertedIndex()
+    try:
+        index.load()
+    except FileNotFoundError:
+        print("Error: index not found. Run the 'build' command first.")
+        sys.exit(1)
+
+    print(f"Searching for: {query}")
+
+    query_tokens = tokenize_text(query)
+    seen_ids = set()
+    results = []
+
+    for token in query_tokens:
+        doc_ids = index.get_documents(token)
+        for doc_id in doc_ids:
+            if doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                results.append(doc_id)
+                if len(results) >= 5:
+                    break
+        if len(results) >= 5:
+            break
+
+    for i, doc_id in enumerate(results, 1):
+        movie = index.docmap[doc_id]
+        print(f"{i}. {movie['title']} (ID: {doc_id})")
+
+
+def tf_command(doc_id: int, term: str) -> None:
+    index = InvertedIndex()
+    try:
+        index.load()
+    except FileNotFoundError:
+        print("Error: index not found. Run the 'build' command first.")
+        sys.exit(1)
+
+    token = tokenize_term(term)
+    print(index.get_tf(doc_id, token))
 
 
 def main() -> None:
@@ -88,20 +150,19 @@ def main() -> None:
 
     subparsers.add_parser("build", help="Build the inverted index")
 
+    tf_parser = subparsers.add_parser("tf", help="Get term frequency for a document")
+    tf_parser.add_argument("doc_id", type=int, help="Document ID")
+    tf_parser.add_argument("term", type=str, help="Term to look up")
+
     args = parser.parse_args()
 
     match args.command:
         case "search":
-            movies = load_movies()
-            results = []
-            for movie in movies:
-                if matches_query(args.query, movie["title"]):
-                    results.append(movie)
-            print(f"Searching for: {args.query}")
-            for index, item in enumerate(results[:5], 1):
-                print(f"{index}. {item['title']}")
+            search_command(args.query)
         case "build":
             build_command()
+        case "tf":
+            tf_command(args.doc_id, args.term)
         case _:
             parser.print_help()
 
