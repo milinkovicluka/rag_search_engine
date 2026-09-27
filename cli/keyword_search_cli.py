@@ -68,6 +68,11 @@ class InvertedIndex:
     def get_tf(self, doc_id: int, term: str) -> int:
         return self.term_frequencies.get(doc_id, Counter()).get(term, 0)
 
+    def get_bm25_idf(self, term: str) -> float:
+        n = len(self.docmap)
+        df = len(self.get_documents(term))
+        return math.log((n - df + 0.5) / (df + 0.5) + 1)
+
     def build(self) -> None:
         movies = load_movies()
         for m in movies:
@@ -177,6 +182,18 @@ def tfidf_command(doc_id: int, term: str) -> None:
     print(f"TF-IDF score of '{term}' in document '{doc_id}': {tf_idf:.2f}")
 
 
+def bm25_idf_command(term: str) -> float:
+    index = InvertedIndex()
+    try:
+        index.load()
+    except FileNotFoundError:
+        print("Error: index not found. Run the 'build' command first.")
+        sys.exit(1)
+
+    token = tokenize_term(term)
+    return index.get_bm25_idf(token)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -197,6 +214,11 @@ def main() -> None:
     tfidf_parser.add_argument("doc_id", type=int, help="Document ID")
     tfidf_parser.add_argument("term", type=str, help="Term to look up")
 
+    bm25_idf_parser = subparsers.add_parser(
+        "bm25idf", help="Get BM25 IDF score for a given term"
+    )
+    bm25_idf_parser.add_argument("term", type=str, help="Term to get BM25 IDF score for")
+
     args = parser.parse_args()
 
     match args.command:
@@ -210,6 +232,9 @@ def main() -> None:
             idf_command(args.term)
         case "tfidf":
             tfidf_command(args.doc_id, args.term)
+        case "bm25idf":
+            bm25idf = bm25_idf_command(args.term)
+            print(f"BM25 IDF score of '{args.term}': {bm25idf:.2f}")
         case _:
             parser.print_help()
 
