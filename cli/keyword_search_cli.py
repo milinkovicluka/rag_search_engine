@@ -10,7 +10,9 @@ from collections import Counter
 from nltk.stem import PorterStemmer
 
 
+CACHE_DIR = "cache"
 BM25_K1 = 1.5
+BM25_B = 0.75
 
 punctuation_table = str.maketrans("", "", string.punctuation)
 stemmer = PorterStemmer()
@@ -52,9 +54,18 @@ class InvertedIndex:
         self.index: dict[str, set[int]] = {}
         self.docmap: dict[int, dict] = {}
         self.term_frequencies: dict[int, Counter] = {}
+        self.doc_lengths: dict[int, int] = {}
+
+        self.index_path = os.path.join(CACHE_DIR, "index.pkl")
+        self.docmap_path = os.path.join(CACHE_DIR, "docmap.pkl")
+        self.term_frequencies_path = os.path.join(CACHE_DIR, "term_frequencies.pkl")
+        self.doc_lengths_path = os.path.join(CACHE_DIR, "doc_lengths.pkl")
 
     def __add_document(self, doc_id: int, text: str) -> None:
         tokens = tokenize_text(text)
+
+        self.doc_lengths[doc_id] = len(tokens)
+
         for token in tokens:
             if token not in self.index:
                 self.index[token] = set()
@@ -75,9 +86,22 @@ class InvertedIndex:
         df = len(self.get_documents(term))
         return math.log((n - df + 0.5) / (df + 0.5) + 1)
 
-    def get_bm25_tf(self, doc_id: int, term: str, k1: float = BM25_K1) -> float:
+    def __get_avg_doc_length(self) -> float:
+        if not self.doc_lengths:
+            return 0.0
+        return sum(self.doc_lengths.values()) / len(self.doc_lengths)
+
+    def get_bm25_tf(self, doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B) -> float:
         tf = self.get_tf(doc_id, term)
-        return (tf * (k1 + 1)) / (tf + k1)
+        doc_length = self.doc_lengths.get(doc_id, 0)
+        avg_doc_length = self.__get_avg_doc_length()
+
+        if avg_doc_length == 0:
+            length_norm = 1.0
+        else:
+            length_norm = 1 - b + b * (doc_length / avg_doc_length)
+
+        return (tf * (k1 + 1)) / (tf + k1 * length_norm)
 
     def build(self) -> None:
         movies = load_movies()
@@ -87,21 +111,25 @@ class InvertedIndex:
             self.__add_document(doc_id, f"{m['title']} {m['description']}")
 
     def save(self) -> None:
-        os.makedirs("cache", exist_ok=True)
-        with open("cache/index.pkl", "wb") as f:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(self.index_path, "wb") as f:
             pickle.dump(self.index, f)
-        with open("cache/docmap.pkl", "wb") as f:
+        with open(self.docmap_path, "wb") as f:
             pickle.dump(self.docmap, f)
-        with open("cache/term_frequencies.pkl", "wb") as f:
+        with open(self.term_frequencies_path, "wb") as f:
             pickle.dump(self.term_frequencies, f)
+        with open(self.doc_lengths_path, "wb") as f:
+            pickle.dump(self.doc_lengths, f)
 
     def load(self) -> None:
-        with open("cache/index.pkl", "rb") as f:
+        with open(self.index_path, "rb") as f:
             self.index = pickle.load(f)
-        with open("cache/docmap.pkl", "rb") as f:
+        with open(self.docmap_path, "rb") as f:
             self.docmap = pickle.load(f)
-        with open("cache/term_frequencies.pkl", "rb") as f:
+        with open(self.term_frequencies_path, "rb") as f:
             self.term_frequencies = pickle.load(f)
+        with open(self.doc_lengths_path, "rb") as f:
+            self.doc_lengths = pickle.load(f)
 
 
 def calculate_idf(index: InvertedIndex, token: str) -> float:
@@ -200,7 +228,7 @@ def bm25_idf_command(term: str) -> float:
     return index.get_bm25_idf(token)
 
 
-def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1) -> float:
+def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B) -> float:
     index = InvertedIndex()
     try:
         index.load()
@@ -209,7 +237,7 @@ def bm25_tf_command(doc_id: int, term: str, k1: float = BM25_K1) -> float:
         sys.exit(1)
 
     token = tokenize_term(term)
-    return index.get_bm25_tf(doc_id, token, k1)
+    return index.get_bm25_tf(doc_id, token, k1, b)
 
 
 def main() -> None:
@@ -245,6 +273,9 @@ def main() -> None:
     bm25_tf_parser.add_argument(
         "k1", type=float, nargs="?", default=BM25_K1, help="Tunable BM25 K1 parameter"
     )
+    bm25_tf_parser.add_argument(
+        "b", type=float, nargs="?", default=BM25_B, help="Tunable BM25 b parameter"
+    )
 
     args = parser.parse_args()
 
@@ -263,7 +294,7 @@ def main() -> None:
             bm25idf = bm25_idf_command(args.term)
             print(f"BM25 IDF score of '{args.term}': {bm25idf:.2f}")
         case "bm25tf":
-            bm25tf = bm25_tf_command(args.doc_id, args.term, args.k1)
+            bm25tf = bm25_tf_command(args.doc_id, args.term, args.k1, args.b)
             print(f"BM25 TF score of '{args.term}' in document '{args.doc_id}': {bm25tf:.2f}")
         case _:
             parser.print_help()
