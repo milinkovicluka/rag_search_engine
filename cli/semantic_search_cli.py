@@ -8,6 +8,7 @@ from lib.semantic_search import (
     semantic_search_command,
     chunk_command,
     semantic_chunk_command,
+    embed_chunks_command,
 )
 
 
@@ -45,6 +46,8 @@ def main() -> None:
         "--overlap", type=int, default=0, help="Number of overlapping sentences between chunks"
     )
 
+    subparsers.add_parser("embed_chunks", help="Build or load chunk embeddings for all movies")
+
     args = parser.parse_args()
 
     match args.command:
@@ -62,6 +65,8 @@ def main() -> None:
             chunk_command(args.text, args.chunk_size, args.overlap)
         case "semantic_chunk":
             semantic_chunk_command(args.text, args.max_chunk_size, args.overlap)
+        case "embed_chunks":
+            embed_chunks_command()
         case _:
             parser.print_help()
 
