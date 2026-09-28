@@ -139,17 +139,29 @@ def semantic_search_command(query: str, limit: int = 5) -> None:
         print(f"  {result['description'][:100]}...")
         print()
 
-def chunk_text(text: str, chunk_size: int = 200) -> list[str]:
+def chunk_text(text: str, chunk_size: int = 200, overlap: int = 0) -> list[str]:
+    if overlap >= chunk_size:
+        raise ValueError("overlap must be smaller than chunk_size")
+
     words = text.split()
+    step = chunk_size - overlap
+
     chunks = []
-    for i in range(0, len(words), chunk_size):
+    i = 0
+    while i < len(words):
         chunk_words = words[i:i + chunk_size]
         chunks.append(" ".join(chunk_words))
+
+        if i + chunk_size >= len(words):
+            break
+
+        i += step
+
     return chunks
 
 
-def chunk_command(text: str, chunk_size: int = 200) -> None:
-    chunks = chunk_text(text, chunk_size)
+def chunk_command(text: str, chunk_size: int = 200, overlap: int = 0) -> None:
+    chunks = chunk_text(text, chunk_size, overlap)
 
     print(f"Chunking {len(text)} characters")
     for i, chunk in enumerate(chunks, 1):
