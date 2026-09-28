@@ -138,3 +138,19 @@ def semantic_search_command(query: str, limit: int = 5) -> None:
         print(f"{i}. {result['title']} (score: {result['score']:.4f})")
         print(f"  {result['description'][:100]}...")
         print()
+
+def chunk_text(text: str, chunk_size: int = 200) -> list[str]:
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_size):
+        chunk_words = words[i:i + chunk_size]
+        chunks.append(" ".join(chunk_words))
+    return chunks
+
+
+def chunk_command(text: str, chunk_size: int = 200) -> None:
+    chunks = chunk_text(text, chunk_size)
+
+    print(f"Chunking {len(text)} characters")
+    for i, chunk in enumerate(chunks, 1):
+        print(f"{i}. {chunk}")
