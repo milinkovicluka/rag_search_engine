@@ -13,6 +13,16 @@ Most search bars fail in one of two ways: they miss results because you didn't t
 3. **Hybrid search** combines both so neither blind spot wins
 4. **LLMs** clean up queries, re-rank results, and write the final answer
 
+
+## Motivation
+Every app now has an "AI search" box, and I kept wondering what was actually happening behind it. I tried building one the quick way, by wiring a vector database and an LLM together with a framework, and it worked... until it didn't. When it returned the wrong movie, I had no idea whether the problem was the query, the embeddings, the ranking, or the LLM, because every layer was a black box. So I built the whole pipeline from scratch, one layer at a time, starting with a plain inverted index and ending with image search. Now when a search fails, I can trace it stage by stage, measure the fix with real precision and recall numbers, and explain why it works.
+Along the way, a few questions shaped the design:
+Why pick between keyword and semantic search when each one catches what the other misses?
+Why trust the first ranking when a cross-encoder or an LLM can double-check it?
+Why guess whether a change helped when a golden dataset can tell you?
+Why should a query have to be text when images and words can share the same vector space?
+
+
 ## Features
 
 ### 🔤 Keyword Search
